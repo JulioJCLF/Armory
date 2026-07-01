@@ -1,0 +1,21 @@
+{
+  "name": "armory",
+  "version": "1.0.0",
+  "description": "Sistema de armaria para airsoft: clientes, equipamentos, estoque, ordens de serviço com PDF e remarketing.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:41729/git/JulioJCLF/Armory"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "express": "^5.2.1",
+    "pdfkit": "^0.19.1"
+  }
+}

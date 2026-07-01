@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Armaria Airsoft</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="logo">🎯 <span>Armaria Airsoft</span></div>
+    <nav>
+      <a data-view="dashboard" class="active">Painel</a>
+      <a data-view="clientes">Clientes</a>
+      <a data-view="equipamentos">Equipamentos</a>
+      <a data-view="estoque">Estoque de Peças</a>
+      <a data-view="ordens">Ordens de Serviço</a>
+      <a data-view="remarketing">Remarketing</a>
+    </nav>
+  </aside>
+
+  <main>
+    <div id="view"></div>
+  </main>
+
+  <!-- Modal genérico -->
+  <div id="modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modal-title"></h3>
+        <button class="close" onclick="fecharModal()">&times;</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
