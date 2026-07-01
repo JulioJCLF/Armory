@@ -36,10 +36,37 @@ function abrirModal(titulo, html) {
 function fecharModal() { el('modal').classList.add('hidden'); }
 el('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') fecharModal(); });
 
+// ---------- Mobile nav ----------
+(function () {
+  const toggle  = document.getElementById('nav-toggle');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (!toggle) return;
+
+  function openNav() {
+    sidebar.classList.add('open');
+    toggle.classList.add('open');
+    overlay.classList.add('visible');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeNav() {
+    sidebar.classList.remove('open');
+    toggle.classList.remove('open');
+    overlay.classList.remove('visible');
+    document.body.style.overflow = '';
+  }
+
+  toggle.addEventListener('click', () =>
+    sidebar.classList.contains('open') ? closeNav() : openNav());
+  overlay.addEventListener('click', closeNav);
+  window._closeNav = closeNav;
+})();
+
 // ---------- Router ----------
 const views = {};
 function navegar(nome) {
   document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.toggle('active', a.dataset.view === nome));
+  if (typeof window._closeNav === 'function') window._closeNav();
   (views[nome] || views.dashboard)();
 }
 document.querySelectorAll('.sidebar nav a').forEach(a =>
@@ -48,29 +75,136 @@ document.querySelectorAll('.sidebar nav a').forEach(a =>
 // ---------- Dashboard ----------
 views.dashboard = async () => {
   const d = await api.get('/api/dashboard');
+  const totalOrdens = (d.statusBreakdown || []).reduce((s, r) => s + r.c, 0);
+  const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
   view().innerHTML = `
-    <div class="page-head"><h1>Painel</h1></div>
-    <div class="cards">
-      <div class="card"><div class="num">${d.clientes}</div><div class="lbl">Clientes</div></div>
-      <div class="card"><div class="num">${d.equipamentos}</div><div class="lbl">Equipamentos</div></div>
-      <div class="card"><div class="num">${d.ordensAbertas}</div><div class="lbl">Ordens em aberto</div></div>
-      <div class="card ${d.estoqueBaixo ? 'alerta' : ''}"><div class="num">${d.estoqueBaixo}</div><div class="lbl">Peças com estoque baixo</div></div>
+    <div class="page-head">
+      <h1>Painel</h1>
+      <span class="muted" style="font-size:13px">${dataHoje}</span>
     </div>
-    <div class="panel" id="dash-ordens"></div>`;
-  const ordens = await api.get('/api/ordens');
-  const recentes = ordens.slice(0, 8);
-  el('dash-ordens').innerHTML = `
-    <table>
-      <thead><tr><th>OS</th><th>Cliente</th><th>Entrada</th><th>Status</th></tr></thead>
-      <tbody>${recentes.length ? recentes.map(o => `
-        <tr style="cursor:pointer" onclick="verOrdem(${o.id})">
-          <td>${esc(o.numero || '#' + o.id)}</td>
-          <td>${esc(o.cliente_nome)}</td>
-          <td>${dataBR(o.data_entrada)}</td>
-          <td><span class="badge ${o.status}">${statusLabel(o.status)}</span></td>
-        </tr>`).join('') : '<tr><td colspan="4" class="empty">Nenhuma ordem cadastrada</td></tr>'}
-      </tbody>
-    </table>`;
+
+    <div class="dash-kpis">
+      <div class="kpi-card clickable" onclick="navegar('clientes')">
+        <div class="kpi-icon kpi-verde">👥</div>
+        <div class="kpi-body"><div class="kpi-num">${d.clientes}</div><div class="kpi-label">Clientes</div></div>
+      </div>
+      <div class="kpi-card clickable" onclick="navegar('equipamentos')">
+        <div class="kpi-icon kpi-azul">🔧</div>
+        <div class="kpi-body"><div class="kpi-num">${d.equipamentos}</div><div class="kpi-label">Equipamentos</div></div>
+      </div>
+      <div class="kpi-card clickable" onclick="navegar('ordens')">
+        <div class="kpi-icon kpi-laranja">📋</div>
+        <div class="kpi-body"><div class="kpi-num">${d.ordensAbertas}</div><div class="kpi-label">Em andamento</div></div>
+      </div>
+      <div class="kpi-card clickable ${d.estoqueBaixo ? 'kpi-alert' : ''}" onclick="navegar('estoque')">
+        <div class="kpi-icon kpi-vermelho">📦</div>
+        <div class="kpi-body"><div class="kpi-num">${d.estoqueBaixo}</div><div class="kpi-label">Estoque baixo</div></div>
+      </div>
+    </div>
+
+    <div class="dash-kpis" style="margin-bottom:24px">
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-verde">💰</div>
+        <div class="kpi-body"><div class="kpi-num kpi-num-sm">${moeda(d.receitaTotal)}</div><div class="kpi-label">Receita total</div></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-verde">📈</div>
+        <div class="kpi-body"><div class="kpi-num kpi-num-sm">${moeda(d.receitaMes)}</div><div class="kpi-label">Receita do mês</div></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-azul">📅</div>
+        <div class="kpi-body"><div class="kpi-num">${d.osMes}</div><div class="kpi-label">OS este mês</div></div>
+      </div>
+      <div class="kpi-card clickable" onclick="navegar('ordens')">
+        <div class="kpi-icon kpi-laranja">🚚</div>
+        <div class="kpi-body"><div class="kpi-num">${d.aEntregar}</div><div class="kpi-label">Prontas p/ entrega</div></div>
+      </div>
+    </div>
+
+    <div class="dash-grid-2">
+      <div>
+        <div class="dash-section-title">Status das ordens</div>
+        <div class="panel">
+          ${totalOrdens === 0
+            ? '<p class="empty" style="padding:24px">Nenhuma ordem cadastrada ainda</p>'
+            : ['aberta','em_andamento','concluida','entregue'].map(s => {
+                const entry = (d.statusBreakdown || []).find(x => x.status === s) || { c: 0 };
+                const pct = totalOrdens > 0 ? Math.round(entry.c / totalOrdens * 100) : 0;
+                return `
+                  <div class="status-row">
+                    <div><span class="badge ${s}">${statusLabel(s)}</span></div>
+                    <div class="status-bar-wrap">
+                      <div class="status-bar-fill ${s}" style="width:${pct}%"></div>
+                    </div>
+                    <div class="status-row-num">${entry.c}</div>
+                  </div>`;
+              }).join('')
+          }
+        </div>
+      </div>
+      <div>
+        <div class="dash-section-title">Peças com estoque baixo</div>
+        <div class="panel">
+          ${d.estoqueBaixoItens && d.estoqueBaixoItens.length
+            ? d.estoqueBaixoItens.map(p => {
+                const pct = p.quantidade_minima > 0 ? Math.min(100, Math.round(p.quantidade / p.quantidade_minima * 100)) : 0;
+                return `
+                  <div class="stock-alert-item">
+                    <div>
+                      <span class="stock-alert-name">${esc(p.nome)}</span>
+                      <span class="muted stock-alert-cat">${esc(p.categoria || '—')}</span>
+                    </div>
+                    <div class="stock-alert-bar-wrap">
+                      <div class="stock-alert-bar" style="width:${pct}%"></div>
+                    </div>
+                    <div class="stock-alert-qty">${p.quantidade}/${p.quantidade_minima}</div>
+                  </div>`;
+              }).join('')
+            : '<p class="empty" style="padding:24px">Estoque OK 🎉</p>'
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="dash-grid-2">
+      <div>
+        <div class="dash-section-title">Próximas entregas (14 dias)</div>
+        <div class="panel">
+          ${d.proximasEntregas && d.proximasEntregas.length
+            ? d.proximasEntregas.map(o => `
+                <div class="delivery-item" onclick="verOrdem(${o.id})">
+                  <div class="delivery-date">${dataBR(o.data_previsao)}</div>
+                  <div class="delivery-info">
+                    <strong>${esc(o.numero || '#' + o.id)}</strong>
+                    <span class="muted"> — ${esc(o.cliente_nome)}</span>
+                  </div>
+                  <span class="badge ${o.status}">${statusLabel(o.status)}</span>
+                </div>`).join('')
+            : '<p class="empty" style="padding:24px">Sem entregas previstas nos próximos 14 dias</p>'
+          }
+        </div>
+      </div>
+      <div>
+        <div class="dash-section-title">Últimas ordens de serviço</div>
+        <div class="panel">
+          ${d.recentesOrdens && d.recentesOrdens.length
+            ? `<table>
+                <thead><tr><th>OS</th><th>Cliente</th><th>Entrada</th><th>Status</th></tr></thead>
+                <tbody>${d.recentesOrdens.map(o => `
+                  <tr style="cursor:pointer" onclick="verOrdem(${o.id})">
+                    <td><strong>${esc(o.numero || '#' + o.id)}</strong></td>
+                    <td>${esc(o.cliente_nome)}</td>
+                    <td>${dataBR(o.data_entrada)}</td>
+                    <td><span class="badge ${o.status}">${statusLabel(o.status)}</span></td>
+                  </tr>`).join('')}
+                </tbody>
+               </table>`
+            : '<p class="empty" style="padding:24px">Nenhuma ordem cadastrada</p>'
+          }
+        </div>
+      </div>
+    </div>`;
 };
 
 function statusLabel(s) {
@@ -336,13 +470,29 @@ async function formOrdem() {
   const [clientes, pecas] = await Promise.all([api.get('/api/clientes'), api.get('/api/pecas')]);
   pecasCache = pecas;
   itensOS = [];
-  if (!clientes.length) return toast('Cadastre um cliente primeiro', true);
   const optsCli = clientes.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+  const semClientes = clientes.length === 0;
   abrirModal('Nova Ordem de Serviço', `
     <div class="grid-2">
-      <div class="field"><label>Cliente *</label><select id="o-cli" onchange="carregarEquipOS()">${optsCli}</select></div>
-      <div class="field"><label>Equipamento</label><select id="o-eq"><option value="">—</option></select></div>
+      <div class="field">
+        <label>Cliente *</label>
+        <div style="display:flex;gap:8px">
+          <select id="o-cli" onchange="carregarEquipOS()" style="flex:1" ${semClientes ? 'disabled' : ''}>
+            ${semClientes ? '<option value="">Nenhum cliente cadastrado</option>' : optsCli}
+          </select>
+          <button class="btn btn-sm btn-sec" onclick="novoClienteNaOS()" title="Cadastrar novo cliente">+ Cliente</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Equipamento</label>
+        <div style="display:flex;gap:8px">
+          <select id="o-eq" style="flex:1"><option value="">—</option></select>
+          <button class="btn btn-sm btn-sec" onclick="novoEquipNaOS()" title="Cadastrar novo equipamento">+ Equip.</button>
+        </div>
+      </div>
     </div>
+    <div id="os-cliente-form"></div>
+    <div id="os-equip-form"></div>
     <div class="field"><label>Descrição do problema</label><textarea id="o-prob"></textarea></div>
     <div class="field"><label>Serviço a realizar / realizado</label><textarea id="o-serv"></textarea></div>
     <div class="grid-3">
@@ -352,12 +502,20 @@ async function formOrdem() {
       <div class="field"><label>Mão de obra (R$)</label><input id="o-mo" type="number" step="0.01" value="0"></div>
       <div class="field"><label>Previsão de entrega</label><input id="o-prev" type="date"></div>
     </div>
-    <div class="section-title">Peças utilizadas</div>
+    <div class="os-sec-head">
+      <div class="section-title" style="margin:0">Peças utilizadas</div>
+      <button class="btn btn-sm btn-sec" onclick="novaPecaNaOS()">+ Nova peça no estoque</button>
+    </div>
+    <div id="os-peca-form"></div>
     <div class="peca-linha">
-      <select id="o-peca">${pecas.map(p => `<option value="${p.id}" data-preco="${p.preco_unitario}" data-nome="${esc(p.nome)}">${esc(p.nome)} (estoque: ${p.quantidade})</option>`).join('')}</select>
-      <input id="o-peca-qtd" type="number" value="1" min="1">
+      <select id="o-peca" ${!pecas.length ? 'disabled' : ''}>
+        ${pecas.length
+          ? pecas.map(p => `<option value="${p.id}" data-preco="${p.preco_unitario}" data-nome="${esc(p.nome)}">${esc(p.nome)} (estoque: ${p.quantidade})</option>`).join('')
+          : '<option value="">— cadastre uma peça primeiro —</option>'}
+      </select>
+      <input id="o-peca-qtd" type="number" value="1" min="1" ${!pecas.length ? 'disabled' : ''}>
       <span></span>
-      <button class="btn btn-sm" onclick="addItemOS()">+</button>
+      <button id="os-add-btn" class="btn btn-sm" onclick="addItemOS()" ${!pecas.length ? 'disabled' : ''}>+</button>
     </div>
     <div id="os-itens"></div>
     <div class="field"><label>Observações</label><textarea id="o-obs"></textarea></div>
@@ -365,14 +523,169 @@ async function formOrdem() {
       <button class="btn btn-sec" onclick="fecharModal()">Cancelar</button>
       <button class="btn" onclick="salvarOrdem()">Salvar Ordem</button>
     </div>`);
-  carregarEquipOS();
+  if (!semClientes) carregarEquipOS();
+}
+
+function novoClienteNaOS() {
+  const container = el('os-cliente-form');
+  if (container.innerHTML) { container.innerHTML = ''; return; }
+  container.innerHTML = `
+    <div class="inline-client-form">
+      <div class="section-title" style="margin-top:0">Novo cliente</div>
+      <div class="field"><label>Nome *</label><input id="nc-nome" placeholder="Nome completo"></div>
+      <div class="grid-2">
+        <div class="field"><label>Telefone</label><input id="nc-tel" placeholder="(xx) xxxxx-xxxx"></div>
+        <div class="field"><label>E-mail</label><input id="nc-email" placeholder="email@exemplo.com"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>CPF</label><input id="nc-cpf"></div>
+        <div class="field"><label>Data de nascimento</label><input id="nc-nasc" type="date"></div>
+      </div>
+      <div class="field"><label>Endereço</label><input id="nc-end"></div>
+      <div class="field check">
+        <input type="checkbox" id="nc-mkt" checked>
+        <label style="margin:0">Aceita receber contatos de marketing</label>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn btn-sm btn-sec" onclick="el('os-cliente-form').innerHTML=''">Cancelar</button>
+        <button class="btn btn-sm" onclick="salvarClienteNaOS()">Salvar e selecionar</button>
+      </div>
+    </div>`;
+  el('nc-nome').focus();
+}
+
+async function salvarClienteNaOS() {
+  const nome = el('nc-nome').value.trim();
+  if (!nome) return toast('Informe o nome do cliente', true);
+  const body = {
+    nome, telefone: el('nc-tel').value.trim(), email: el('nc-email').value.trim(),
+    cpf: el('nc-cpf').value.trim(), data_nascimento: el('nc-nasc').value,
+    endereco: el('nc-end').value.trim(), aceita_marketing: el('nc-mkt').checked
+  };
+  try {
+    const c = await api.post('/api/clientes', body);
+    const sel = el('o-cli');
+    const opt = document.createElement('option');
+    opt.value = c.id; opt.textContent = esc(c.nome); opt.selected = true;
+    sel.disabled = false;
+    sel.appendChild(opt);
+    el('os-cliente-form').innerHTML = '';
+    await carregarEquipOS();
+    toast('Cliente ' + c.nome + ' cadastrado');
+  } catch (e) { toast(e.message, true); }
 }
 
 async function carregarEquipOS() {
   const cliId = el('o-cli').value;
+  if (!cliId) return;
   const c = await api.get('/api/clientes/' + cliId);
   el('o-eq').innerHTML = '<option value="">—</option>' +
     c.equipamentos.map(e => `<option value="${e.id}">${esc(e.tipo)} ${esc(e.marca)} ${esc(e.modelo)}</option>`).join('');
+}
+
+function novoEquipNaOS() {
+  const container = el('os-equip-form');
+  if (container.innerHTML) { container.innerHTML = ''; return; }
+  container.innerHTML = `
+    <div class="inline-client-form">
+      <div class="section-title" style="margin-top:0">Novo equipamento</div>
+      <div class="grid-2">
+        <div class="field"><label>Tipo</label><input id="ne-tipo" placeholder="Rifle, Pistola, Sniper..."></div>
+        <div class="field"><label>FPS</label><input id="ne-fps" type="number" placeholder="350"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Marca</label><input id="ne-marca" placeholder="Tokyo Marui, G&G..."></div>
+        <div class="field"><label>Modelo</label><input id="ne-modelo" placeholder="M4A1, AK47..."></div>
+      </div>
+      <div class="field"><label>Número de série</label><input id="ne-serie"></div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn btn-sm btn-sec" onclick="el('os-equip-form').innerHTML=''">Cancelar</button>
+        <button class="btn btn-sm" onclick="salvarEquipNaOS()">Salvar e selecionar</button>
+      </div>
+    </div>`;
+  el('ne-tipo').focus();
+}
+
+async function salvarEquipNaOS() {
+  const cliId = el('o-cli').value;
+  if (!cliId) return toast('Selecione um cliente primeiro', true);
+  const body = {
+    cliente_id: Number(cliId),
+    tipo: el('ne-tipo').value.trim(),
+    marca: el('ne-marca').value.trim(),
+    modelo: el('ne-modelo').value.trim(),
+    numero_serie: el('ne-serie').value.trim(),
+    fps: el('ne-fps').value ? Number(el('ne-fps').value) : null,
+    observacoes: ''
+  };
+  try {
+    const e = await api.post('/api/equipamentos', body);
+    const sel = el('o-eq');
+    const opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = [e.tipo, e.marca, e.modelo].filter(Boolean).join(' ');
+    opt.selected = true;
+    sel.appendChild(opt);
+    el('os-equip-form').innerHTML = '';
+    toast('Equipamento cadastrado e selecionado');
+  } catch (e) { toast(e.message, true); }
+}
+
+function novaPecaNaOS() {
+  const container = el('os-peca-form');
+  if (container.innerHTML) { container.innerHTML = ''; return; }
+  container.innerHTML = `
+    <div class="inline-client-form">
+      <div class="section-title" style="margin-top:0">Nova peça no estoque</div>
+      <div class="field"><label>Nome *</label><input id="np-nome" placeholder="Ex: Mola M120, O-ring, Bateria LiPo..."></div>
+      <div class="grid-2">
+        <div class="field"><label>Categoria</label><input id="np-cat" placeholder="Gearbox, Hop-up, Bateria..."></div>
+        <div class="field"><label>Preço unitário (R$)</label><input id="np-preco" type="number" step="0.01" min="0" value="0"></div>
+      </div>
+      <div class="grid-3">
+        <div class="field"><label>Quantidade inicial</label><input id="np-qtd" type="number" min="0" value="1"></div>
+        <div class="field"><label>Estoque mínimo</label><input id="np-min" type="number" min="0" value="0"></div>
+        <div class="field"><label>Localização</label><input id="np-loc" placeholder="Prateleira A3..."></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn btn-sm btn-sec" onclick="el('os-peca-form').innerHTML=''">Cancelar</button>
+        <button class="btn btn-sm" onclick="salvarPecaNaOS()">Salvar e adicionar</button>
+      </div>
+    </div>`;
+  el('np-nome').focus();
+}
+
+async function salvarPecaNaOS() {
+  const nome = el('np-nome').value.trim();
+  if (!nome) return toast('Informe o nome da peça', true);
+  const body = {
+    nome, codigo: '',
+    categoria: el('np-cat').value.trim(),
+    preco_unitario: Number(el('np-preco').value) || 0,
+    quantidade: Number(el('np-qtd').value) || 1,
+    quantidade_minima: Number(el('np-min').value) || 0,
+    localizacao: el('np-loc').value.trim()
+  };
+  try {
+    const p = await api.post('/api/pecas', body);
+    pecasCache.push(p);
+    const sel = el('o-peca');
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.dataset.preco = p.preco_unitario;
+    opt.dataset.nome = p.nome;
+    opt.textContent = `${p.nome} (estoque: ${p.quantidade})`;
+    opt.selected = true;
+    if (sel.disabled) {
+      sel.innerHTML = '';
+      sel.disabled = false;
+      el('o-peca-qtd').disabled = false;
+      el('os-add-btn').disabled = false;
+    }
+    sel.appendChild(opt);
+    el('os-peca-form').innerHTML = '';
+    toast('Peça "' + p.nome + '" adicionada ao estoque');
+  } catch (e) { toast(e.message, true); }
 }
 
 function addItemOS() {

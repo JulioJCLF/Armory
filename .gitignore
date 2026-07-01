@@ -1,5 +1,5 @@
 node_modules/
-armory.db
-armory.db-shm
-armory.db-wal
+*.db
+*.db-shm
+*.db-wal
 *.log

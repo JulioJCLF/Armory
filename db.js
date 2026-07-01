@@ -1,7 +1,13 @@
 const path = require('path');
+const fs = require('fs');
 const Database = require('better-sqlite3');
 
-const db = new Database(path.join(__dirname, 'armory.db'));
+// DATA_DIR is set to a persistent volume path in production (e.g. /data on Railway).
+// Falls back to the project directory for local development.
+const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+const db = new Database(path.join(dataDir, 'caliber.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
