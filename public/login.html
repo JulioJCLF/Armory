@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caliber — Entrar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="login-body">
+
+  <div class="login-wrap">
+    <div class="login-brand">
+      <div class="login-logo">CALIBER</div>
+      <div class="login-tagline">Airsoft Management</div>
+    </div>
+
+    <div class="login-card">
+      <h2 class="login-title">Entrar</h2>
+
+      <div id="login-error" class="login-error hidden"></div>
+
+      <div class="field">
+        <label for="username">Usuário</label>
+        <input id="username" type="text" placeholder="admin" autocomplete="username" autofocus>
+      </div>
+      <div class="field" style="margin-bottom:22px">
+        <label for="password">Senha</label>
+        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+
+      <button class="btn login-btn" id="login-btn" onclick="doLogin()">Entrar</button>
+    </div>
+
+    <p class="login-hint">Caliber v1.0 &mdash; acesso restrito</p>
+  </div>
+
+  <script>
+    // Already logged in → go straight to app
+    fetch('/api/auth/me').then(r => { if (r.ok) window.location.replace('/'); });
+
+    document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+    async function doLogin() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const errEl = document.getElementById('login-error');
+      const btn   = document.getElementById('login-btn');
+
+      errEl.classList.add('hidden');
+
+      if (!username || !password) {
+        errEl.textContent = 'Preencha usuário e senha';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Entrando…';
+
+      try {
+        const r = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await r.json();
+
+        if (r.ok) {
+          window.location.replace('/');
+        } else {
+          errEl.textContent = data.erro || 'Erro ao fazer login';
+          errEl.classList.remove('hidden');
+          btn.disabled = false;
+          btn.textContent = 'Entrar';
+          document.getElementById('password').value = '';
+          document.getElementById('password').focus();
+        }
+      } catch {
+        errEl.textContent = 'Sem conexão com o servidor';
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+      }
+    }
+  </script>
+</body>
+</html>

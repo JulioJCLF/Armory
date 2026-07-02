@@ -2,50 +2,54 @@ const express = require('express');
 const db = require('../db');
 const router = express.Router();
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const busca = req.query.busca;
   let rows;
   if (busca) {
     const q = `%${busca}%`;
-    rows = db.prepare(
-      `SELECT * FROM clientes WHERE nome LIKE ? OR cpf LIKE ? OR telefone LIKE ? OR email LIKE ? ORDER BY nome`
-    ).all(q, q, q, q);
+    rows = await db.query(
+      `SELECT * FROM clientes WHERE nome ILIKE ? OR cpf ILIKE ? OR telefone ILIKE ? OR email ILIKE ? ORDER BY nome`,
+      [q, q, q, q]
+    );
   } else {
-    rows = db.prepare('SELECT * FROM clientes ORDER BY nome').all();
+    rows = await db.query('SELECT * FROM clientes ORDER BY nome');
   }
   res.json(rows);
 });
 
-router.get('/:id', (req, res) => {
-  const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id);
+router.get('/:id', async (req, res) => {
+  const cliente = await db.one('SELECT * FROM clientes WHERE id = ?', [req.params.id]);
   if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado' });
-  cliente.equipamentos = db.prepare('SELECT * FROM equipamentos WHERE cliente_id = ? ORDER BY criado_em DESC').all(cliente.id);
-  cliente.ordens = db.prepare('SELECT * FROM ordens WHERE cliente_id = ? ORDER BY criado_em DESC').all(cliente.id);
+  cliente.equipamentos = await db.query('SELECT * FROM equipamentos WHERE cliente_id = ? ORDER BY criado_em DESC', [cliente.id]);
+  cliente.ordens = await db.query('SELECT * FROM ordens WHERE cliente_id = ? ORDER BY criado_em DESC', [cliente.id]);
   res.json(cliente);
 });
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { nome, cpf, telefone, email, endereco, data_nascimento, aceita_marketing, observacoes } = req.body;
   if (!nome) return res.status(400).json({ erro: 'Nome é obrigatório' });
-  const info = db.prepare(
+  const row = await db.run(
     `INSERT INTO clientes (nome, cpf, telefone, email, endereco, data_nascimento, aceita_marketing, observacoes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(nome, cpf, telefone, email, endereco, data_nascimento, aceita_marketing ? 1 : 0, observacoes);
-  res.status(201).json(db.prepare('SELECT * FROM clientes WHERE id = ?').get(info.lastInsertRowid));
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+    [nome, cpf, telefone, email, endereco, data_nascimento, aceita_marketing ? 1 : 0, observacoes]
+  );
+  res.status(201).json(row);
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   const { nome, cpf, telefone, email, endereco, data_nascimento, aceita_marketing, observacoes } = req.body;
-  const existe = db.prepare('SELECT id FROM clientes WHERE id = ?').get(req.params.id);
+  const existe = await db.one('SELECT id FROM clientes WHERE id = ?', [req.params.id]);
   if (!existe) return res.status(404).json({ erro: 'Cliente não encontrado' });
-  db.prepare(
-    `UPDATE clientes SET nome=?, cpf=?, telefone=?, email=?, endereco=?, data_nascimento=?, aceita_marketing=?, observacoes=? WHERE id=?`
-  ).run(nome, cpf, telefone, email, endereco, data_nascimento, aceita_marketing ? 1 : 0, observacoes, req.params.id);
-  res.json(db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id));
+  const row = await db.run(
+    `UPDATE clientes SET nome=?, cpf=?, telefone=?, email=?, endereco=?, data_nascimento=?, aceita_marketing=?, observacoes=?
+     WHERE id=? RETURNING *`,
+    [nome, cpf, telefone, email, endereco, data_nascimento, aceita_marketing ? 1 : 0, observacoes, req.params.id]
+  );
+  res.json(row);
 });
 
-router.delete('/:id', (req, res) => {
-  db.prepare('DELETE FROM clientes WHERE id = ?').run(req.params.id);
+router.delete('/:id', async (req, res) => {
+  await db.run('DELETE FROM clientes WHERE id = ?', [req.params.id]);
   res.json({ ok: true });
 });
 

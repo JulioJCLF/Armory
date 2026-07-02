@@ -1,18 +1,80 @@
+// ---------- Auth ----------
+let currentUser = null;
+
+(async function checkAuth() {
+  try {
+    const r = await fetch('/api/auth/me');
+    if (r.status === 401) { window.location.replace('/login'); return; }
+    currentUser = await r.json();
+    const nameEl = document.getElementById('sidebar-username');
+    if (nameEl) nameEl.textContent = currentUser.username || '—';
+    if (currentUser.role === 'admin') {
+      const navU = document.getElementById('nav-usuarios');
+      if (navU) navU.style.display = '';
+    }
+  } catch {
+    window.location.replace('/login');
+  }
+})();
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  window.location.replace('/login');
+}
+
+function abrirMinhaConta() {
+  if (!currentUser) return;
+  abrirModal('Minha Conta', `
+    <div class="grid-2">
+      <div class="field"><label>Usuário</label><input value="${esc(currentUser.username)}" disabled></div>
+      <div class="field"><label>Função</label><input value="${currentUser.role === 'admin' ? 'Administrador' : 'Técnico'}" disabled></div>
+    </div>
+    <div class="section-title">Alterar senha</div>
+    <div class="field"><label>Senha atual</label><input id="cp-atual" type="password" autocomplete="current-password"></div>
+    <div class="field"><label>Nova senha (mín. 6 caracteres)</label><input id="cp-nova" type="password" autocomplete="new-password"></div>
+    <div class="field"><label>Confirmar nova senha</label><input id="cp-conf" type="password" autocomplete="new-password"></div>
+    <div class="modal-foot">
+      <button class="btn btn-sec" onclick="fecharModal()">Cancelar</button>
+      <button class="btn" onclick="trocarSenha()">Alterar senha</button>
+    </div>`);
+}
+
+async function trocarSenha() {
+  const atual = el('cp-atual').value;
+  const nova  = el('cp-nova').value;
+  const conf  = el('cp-conf').value;
+  if (!atual || !nova) return toast('Preencha todos os campos', true);
+  if (nova.length < 6) return toast('Nova senha precisa ter ao menos 6 caracteres', true);
+  if (nova !== conf)   return toast('As senhas não conferem', true);
+  try {
+    await api.post('/api/auth/change-password', { current: atual, novo: nova });
+    fecharModal(); toast('Senha alterada com sucesso');
+  } catch (e) { toast(e.message, true); }
+}
+
 // ---------- Helpers ----------
+function handle401(status) { if (status === 401) { window.location.replace('/login'); } }
+
 const api = {
-  async get(url) { const r = await fetch(url); return r.json(); },
+  async get(url) {
+    const r = await fetch(url);
+    handle401(r.status);
+    return r.json();
+  },
   async send(url, method, body) {
     const r = await fetch(url, {
       method, headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined
     });
+    handle401(r.status);
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.erro || 'Erro na operação');
     return data;
   },
-  post(u, b) { return this.send(u, 'POST', b); },
-  put(u, b) { return this.send(u, 'PUT', b); },
-  del(u) { return this.send(u, 'DELETE'); }
+  post(u, b)  { return this.send(u, 'POST', b); },
+  put(u, b)   { return this.send(u, 'PUT', b); },
+  patch(u, b) { return this.send(u, 'PATCH', b); },
+  del(u)      { return this.send(u, 'DELETE'); }
 };
 
 const el = (id) => document.getElementById(id);
@@ -814,6 +876,99 @@ async function salvarContato(id) {
   try {
     await api.post('/api/remarketing/contato', { cliente_id: id, canal: el('c-canal').value, mensagem: el('c-msg').value.trim() });
     fecharModal(); toast('Contato registrado'); navegar('remarketing');
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---------- Usuários ----------
+views.usuarios = async () => {
+  if (!currentUser || currentUser.role !== 'admin') {
+    view().innerHTML = '<div class="page-head"><h1>Acesso negado</h1></div>';
+    return;
+  }
+  view().innerHTML = `
+    <div class="page-head"><h1>Usuários</h1>
+      <div class="actions"><button class="btn" onclick="formNovoUsuario()">+ Novo Usuário</button></div>
+    </div>
+    <div class="panel" id="lista-users"></div>`;
+  carregarUsuarios();
+};
+
+async function carregarUsuarios() {
+  const users = await api.get('/api/auth/users');
+  el('lista-users').innerHTML = `
+    <table>
+      <thead><tr><th>Usuário</th><th>Função</th><th>Criado em</th><th></th></tr></thead>
+      <tbody>${users.length ? users.map(u => `
+        <tr>
+          <td>
+            <strong>${esc(u.username)}</strong>
+            ${u.id === currentUser.id ? ' <span class="badge ok">Você</span>' : ''}
+          </td>
+          <td>
+            ${u.id === currentUser.id
+              ? `<span class="badge ${u.role === 'admin' ? 'badge-admin' : 'ok'}">${u.role === 'admin' ? 'Administrador' : 'Técnico'}</span>`
+              : `<select onchange="alterarFuncao(${u.id}, this.value)" class="role-select">
+                   <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrador</option>
+                   <option value="tecnico" ${u.role === 'tecnico' ? 'selected' : ''}>Técnico</option>
+                 </select>`
+            }
+          </td>
+          <td class="muted">${dataBR(u.criado_em)}</td>
+          <td>
+            ${u.id !== currentUser.id
+              ? `<button class="btn btn-sm btn-danger" onclick="excluirUsuario(${u.id}, '${esc(u.username)}')">Excluir</button>`
+              : ''}
+          </td>
+        </tr>`).join('')
+        : '<tr><td colspan="4" class="empty">Nenhum usuário</td></tr>'}
+      </tbody>
+    </table>`;
+}
+
+function formNovoUsuario() {
+  abrirModal('Novo Usuário', `
+    <div class="field"><label>Usuário *</label><input id="nu-user" placeholder="nome do usuário (sem espaços)" autocomplete="off"></div>
+    <div class="field"><label>Senha * (mín. 6 caracteres)</label><input id="nu-pass" type="password" autocomplete="new-password"></div>
+    <div class="field"><label>Confirmar senha</label><input id="nu-conf" type="password" autocomplete="new-password"></div>
+    <div class="field"><label>Função</label>
+      <select id="nu-role">
+        <option value="tecnico">Técnico</option>
+        <option value="admin">Administrador</option>
+      </select>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-sec" onclick="fecharModal()">Cancelar</button>
+      <button class="btn" onclick="salvarNovoUsuario()">Criar Usuário</button>
+    </div>`);
+  el('nu-user').focus();
+}
+
+async function salvarNovoUsuario() {
+  const username = el('nu-user').value.trim();
+  const password = el('nu-pass').value;
+  const conf     = el('nu-conf').value;
+  const role     = el('nu-role').value;
+  if (!username || !password) return toast('Preencha usuário e senha', true);
+  if (password.length < 6)    return toast('Senha precisa ter ao menos 6 caracteres', true);
+  if (password !== conf)      return toast('As senhas não conferem', true);
+  try {
+    await api.post('/api/auth/register', { username, password, role });
+    fecharModal(); toast('Usuário criado'); carregarUsuarios();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function alterarFuncao(id, role) {
+  try {
+    await api.patch(`/api/auth/users/${id}/role`, { role });
+    toast('Função atualizada');
+  } catch (e) { toast(e.message, true); carregarUsuarios(); }
+}
+
+async function excluirUsuario(id, username) {
+  if (!confirm(`Excluir o usuário "${username}"? Esta ação não pode ser desfeita.`)) return;
+  try {
+    await api.del('/api/auth/users/' + id);
+    toast('Usuário excluído'); carregarUsuarios();
   } catch (e) { toast(e.message, true); }
 }
 
