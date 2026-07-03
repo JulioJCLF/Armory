@@ -33,7 +33,7 @@ app.use(async (req, res, next) => {
 // Falls back to in-memory store for local dev without DATABASE_URL.
 app.use(session({
   store: process.env.DATABASE_URL
-    ? new pgSession({ pool: db.pool, tableName: 'user_sessions', createTableIfMissing: true })
+    ? new pgSession({ pool: db.pool, tableName: 'user_sessions' })
     : undefined,
   secret: process.env.SESSION_SECRET || 'caliber-dev-secret-change-in-prod',
   resave: false,
