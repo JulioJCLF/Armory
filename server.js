@@ -12,9 +12,27 @@ const PORT = process.env.PORT || 3000;
 // ── Parsers ────────────────────────────────────────────────
 app.use(express.json());
 
+// ── Static assets (CSS, JS — no DB needed) ────────────────
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+
+// ── Wait for DB schema before processing any dynamic request ──
+// On serverless cold starts the first request can arrive before
+// initSchema() resolves, so we block here until tables are ready.
+app.use(async (req, res, next) => {
+  try {
+    await db.ready;
+    next();
+  } catch (err) {
+    console.error('DB unavailable:', err.message);
+    res.status(503).send('Service temporarily unavailable — database not ready');
+  }
+});
+
 // ── Sessions ───────────────────────────────────────────────
+// Use PostgreSQL session store in production (persists across serverless invocations).
+// Falls back to in-memory store for local dev without DATABASE_URL.
 app.use(session({
-  store: db.pool
+  store: process.env.DATABASE_URL
     ? new pgSession({ pool: db.pool, tableName: 'user_sessions', createTableIfMissing: true })
     : undefined,
   secret: process.env.SESSION_SECRET || 'caliber-dev-secret-change-in-prod',
@@ -24,12 +42,9 @@ app.use(session({
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-  }
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  },
 }));
-
-// ── Static assets ──────────────────────────────────────────
-app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // ── Auth routes (public) ──────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
@@ -66,7 +81,7 @@ app.get('/api/ordens/:id/pdf', requireAuth, async (req, res) => {
 
 // ── Dashboard ─────────────────────────────────────────────
 app.get('/api/dashboard', requireAuth, async (req, res) => {
-  const mes = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+  const mes  = new Date().toISOString().slice(0, 7);
   const hoje = new Date().toISOString().slice(0, 10);
   const em14 = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
 
@@ -100,7 +115,7 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
       LEFT JOIN (SELECT ordem_id, SUM(quantidade * preco_unitario) AS t FROM ordem_pecas GROUP BY ordem_id) op ON op.ordem_id = o.id
       WHERE o.status IN ('concluida','entregue') AND LEFT(o.data_entrada, 7) = ?
     `, [mes]),
-    db.one("SELECT COUNT(*)::int c FROM ordens WHERE LEFT(data_entrada, 7) = ?", [mes]),
+    db.one('SELECT COUNT(*)::int c FROM ordens WHERE LEFT(data_entrada, 7) = ?', [mes]),
     db.one("SELECT COUNT(*)::int c FROM ordens WHERE status = 'concluida'"),
     db.query('SELECT status, COUNT(*)::int c FROM ordens GROUP BY status'),
     db.query(`

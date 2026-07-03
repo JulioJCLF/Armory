@@ -14,22 +14,18 @@ function toPostgres(sql) {
 }
 
 const db = {
-  // Returns all matching rows
   async query(sql, params = []) {
     const res = await pool.query(toPostgres(sql), params);
     return res.rows;
   },
-  // Returns first row or null
   async one(sql, params = []) {
     const res = await pool.query(toPostgres(sql), params);
     return res.rows[0] || null;
   },
-  // Executes and returns first row (useful with RETURNING)
   async run(sql, params = []) {
     const res = await pool.query(toPostgres(sql), params);
     return res.rows[0];
   },
-  // Runs multiple statements in a transaction
   async transaction(fn) {
     const client = await pool.connect();
     const q = (sql, params = []) => client.query(toPostgres(sql), params);
@@ -76,31 +72,31 @@ async function initSchema() {
     );
 
     CREATE TABLE IF NOT EXISTS pecas (
-      id               SERIAL PRIMARY KEY,
-      nome             TEXT NOT NULL,
-      codigo           TEXT,
-      categoria        TEXT,
-      quantidade       INTEGER DEFAULT 0,
+      id                SERIAL PRIMARY KEY,
+      nome              TEXT NOT NULL,
+      codigo            TEXT,
+      categoria         TEXT,
+      quantidade        INTEGER DEFAULT 0,
       quantidade_minima INTEGER DEFAULT 0,
-      preco_unitario   REAL DEFAULT 0,
-      localizacao      TEXT,
-      criado_em        TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+      preco_unitario    REAL DEFAULT 0,
+      localizacao       TEXT,
+      criado_em         TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
     );
 
     CREATE TABLE IF NOT EXISTS ordens (
-      id                  SERIAL PRIMARY KEY,
-      numero              TEXT,
-      cliente_id          INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
-      equipamento_id      INTEGER REFERENCES equipamentos(id) ON DELETE SET NULL,
-      descricao_problema  TEXT,
-      servico_realizado   TEXT,
-      status              TEXT DEFAULT 'aberta',
-      valor_mao_obra      REAL DEFAULT 0,
-      data_entrada        TEXT DEFAULT to_char(CURRENT_DATE, 'YYYY-MM-DD'),
-      data_previsao       TEXT,
-      data_conclusao      TEXT,
-      observacoes         TEXT,
-      criado_em           TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+      id                 SERIAL PRIMARY KEY,
+      numero             TEXT,
+      cliente_id         INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+      equipamento_id     INTEGER REFERENCES equipamentos(id) ON DELETE SET NULL,
+      descricao_problema TEXT,
+      servico_realizado  TEXT,
+      status             TEXT DEFAULT 'aberta',
+      valor_mao_obra     REAL DEFAULT 0,
+      data_entrada       TEXT DEFAULT to_char(CURRENT_DATE, 'YYYY-MM-DD'),
+      data_previsao      TEXT,
+      data_conclusao     TEXT,
+      observacoes        TEXT,
+      criado_em          TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
     );
 
     CREATE TABLE IF NOT EXISTS ordem_pecas (
@@ -129,26 +125,45 @@ async function initSchema() {
     );
   `);
 
-  // Seed default admin on first run
-  const { count } = await pool.query('SELECT COUNT(*)::int AS count FROM users').then(r => r.rows[0]);
-  if (count === 0) {
-    const user = (process.env.ADMIN_USER || 'admin').toLowerCase();
-    const pass = process.env.ADMIN_PASS || 'caliber123';
+  // Admin user bootstrap:
+  // - If no users exist → create from env vars (or defaults)
+  // - If ADMIN_PASS is explicitly set → always sync it so changing the env takes effect
+  const adminUsername = (process.env.ADMIN_USER || 'admin').toLowerCase();
+  const adminPass     = process.env.ADMIN_PASS || 'caliber123';
+
+  const existing = await pool.query(
+    'SELECT id FROM users WHERE username = $1',
+    [adminUsername]
+  );
+
+  if (existing.rows.length === 0) {
     await pool.query(
       'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
-      [user, hashPassword(pass), 'admin']
+      [adminUsername, hashPassword(adminPass), 'admin']
     );
     if (!process.env.ADMIN_PASS) {
-      console.warn('\n⚠️  Usuário admin criado com senha padrão "caliber123".');
-      console.warn('   Defina ADMIN_USER e ADMIN_PASS como variáveis de ambiente em produção.\n');
+      console.warn('\n⚠️  Admin criado com senha padrão "caliber123". Defina ADMIN_PASS em produção.\n');
     }
+  } else if (process.env.ADMIN_PASS) {
+    // Env var is set → sync password so any change to ADMIN_PASS takes effect on redeploy
+    await pool.query(
+      'UPDATE users SET password_hash = $1 WHERE username = $2',
+      [hashPassword(adminPass), adminUsername]
+    );
   }
 }
 
-initSchema().catch(err => {
-  console.error('Erro ao inicializar banco de dados:', err.message);
-  process.exit(1);
-});
+// Export a promise that resolves when tables are ready.
+// server.js awaits this before handling requests (critical for serverless cold starts).
+let resolveReady, rejectReady;
+db.ready = new Promise((res, rej) => { resolveReady = res; rejectReady = rej; });
+
+initSchema()
+  .then(resolveReady)
+  .catch(err => {
+    console.error('Erro ao inicializar banco de dados:', err.message);
+    rejectReady(err);
+  });
 
 db.pool = pool;
 module.exports = db;

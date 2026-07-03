@@ -7,6 +7,37 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Hide page until auth check completes — prevents flash of login on reload */
+    body { opacity: 0; transition: opacity .18s ease; }
+    body.ready { opacity: 1; }
+
+    .pw-wrap { position: relative; }
+    .pw-wrap input { padding-right: 42px; width: 100%; }
+    .pw-toggle {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; padding: 0;
+      color: var(--txt-muted); display: flex; align-items: center;
+    }
+    .pw-toggle:hover { color: var(--txt-primary); }
+    .pw-toggle svg { width: 18px; height: 18px; }
+
+    .login-info {
+      font-size: 12px; color: rgba(255,255,255,.38);
+      text-align: center; line-height: 1.6; margin-top: -4px;
+    }
+    .login-info details summary {
+      cursor: pointer; list-style: none; color: rgba(255,255,255,.32);
+      font-size: 11px; letter-spacing: .04em;
+    }
+    .login-info details summary::-webkit-details-marker { display: none; }
+    .login-info details[open] summary { color: rgba(255,255,255,.5); margin-bottom: 8px; }
+    .login-info details p { margin: 0; }
+    .login-info code {
+      background: rgba(255,255,255,.08); border-radius: 4px;
+      padding: 1px 5px; font-family: monospace; font-size: 11px;
+    }
+  </style>
 </head>
 <body class="login-body">
 
@@ -23,36 +54,72 @@
 
       <div class="field">
         <label for="username">Usuário</label>
-        <input id="username" type="text" placeholder="admin" autocomplete="username" autofocus>
+        <input id="username" type="text" placeholder="seu usuário" autocomplete="username">
       </div>
+
       <div class="field" style="margin-bottom:22px">
         <label for="password">Senha</label>
-        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
+        <div class="pw-wrap">
+          <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
+          <button class="pw-toggle" type="button" onclick="toggleSenha()" tabindex="-1" aria-label="Mostrar/ocultar senha">
+            <svg id="eye-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg id="eye-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
       </div>
 
       <button class="btn login-btn" id="login-btn" onclick="doLogin()">Entrar</button>
     </div>
 
-    <p class="login-hint">Caliber v1.0 &mdash; acesso restrito</p>
+    <div class="login-info">
+      <details>
+        <summary>Primeiro acesso?</summary>
+        <p>Use as credenciais definidas nas variáveis de ambiente<br>
+        <code>ADMIN_USER</code> e <code>ADMIN_PASS</code> do servidor.<br>
+        Padrão: usuário <code>admin</code>, senha <code>caliber123</code>.</p>
+      </details>
+    </div>
   </div>
 
   <script>
-    // Already logged in → go straight to app
-    fetch('/api/auth/me').then(r => { if (r.ok) window.location.replace('/'); });
+    // Check if already authenticated before showing the page.
+    // Avoids the login page flashing for users who are already logged in.
+    fetch('/api/auth/me')
+      .then(r => {
+        if (r.ok) {
+          window.location.replace('/');
+        } else {
+          document.body.classList.add('ready');
+          document.getElementById('username').focus();
+        }
+      })
+      .catch(() => {
+        document.body.classList.add('ready');
+        document.getElementById('username').focus();
+      });
 
     document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+    function toggleSenha() {
+      const input = document.getElementById('password');
+      const show  = document.getElementById('eye-show');
+      const hide  = document.getElementById('eye-hide');
+      const isHidden = input.type === 'password';
+      input.type = isHidden ? 'text' : 'password';
+      show.style.display = isHidden ? 'none' : '';
+      hide.style.display = isHidden ? '' : 'none';
+    }
 
     async function doLogin() {
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
-      const errEl = document.getElementById('login-error');
-      const btn   = document.getElementById('login-btn');
+      const errEl    = document.getElementById('login-error');
+      const btn      = document.getElementById('login-btn');
 
       errEl.classList.add('hidden');
 
       if (!username || !password) {
-        errEl.textContent = 'Preencha usuário e senha';
-        errEl.classList.remove('hidden');
+        showError('Preencha usuário e senha');
         return;
       }
 
@@ -60,29 +127,34 @@
       btn.textContent = 'Entrando…';
 
       try {
-        const r = await fetch('/api/auth/login', {
+        const r    = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password })
+          body: JSON.stringify({ username, password }),
         });
         const data = await r.json();
 
         if (r.ok) {
+          btn.textContent = 'Redirecionando…';
           window.location.replace('/');
         } else {
-          errEl.textContent = data.erro || 'Erro ao fazer login';
-          errEl.classList.remove('hidden');
+          showError(data.erro || 'Erro ao fazer login');
           btn.disabled = false;
           btn.textContent = 'Entrar';
           document.getElementById('password').value = '';
           document.getElementById('password').focus();
         }
       } catch {
-        errEl.textContent = 'Sem conexão com o servidor';
-        errEl.classList.remove('hidden');
+        showError('Sem conexão com o servidor');
         btn.disabled = false;
         btn.textContent = 'Entrar';
       }
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('login-error');
+      el.textContent = msg;
+      el.classList.remove('hidden');
     }
   </script>
 </body>
