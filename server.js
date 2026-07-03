@@ -1,6 +1,6 @@
 const path = require('path');
 const express = require('express');
-const cookieSession = require('cookie-session');
+const { sessionMiddleware } = require('./lib/session');
 const db = require('./db');
 const ordensRouter = require('./routes/ordens');
 const { gerarOrdemServicoPDF } = require('./pdf/ordemServico');
@@ -28,16 +28,8 @@ app.use(async (req, res, next) => {
 });
 
 // ── Sessions ───────────────────────────────────────────────
-// cookie-session stores session data in a signed HTTP-only cookie —
-// no server-side store needed, works across all Vercel instances.
-app.use(cookieSession({
-  name: 'caliber.sess',
-  keys: [process.env.SESSION_SECRET || 'caliber-dev-secret-change-in-prod'],
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-  httpOnly: true,
-  sameSite: 'lax',
-  secure: process.env.NODE_ENV === 'production',
-}));
+// Custom HMAC-signed cookie session — no external library, works with Express 5.
+app.use(sessionMiddleware(process.env.SESSION_SECRET || 'caliber-dev-secret-change-in-prod'));
 
 // ── Auth routes (public) ──────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));

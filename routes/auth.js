@@ -6,7 +6,7 @@ const router = express.Router();
 router.get('/me', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ erro: 'Não autenticado' });
   const user = await db.one('SELECT id, username, role FROM users WHERE id = ?', [req.session.userId]);
-  if (!user) { req.session.destroy(); return res.status(401).json({ erro: 'Sessão inválida' }); }
+  if (!user) { res.clearSession(); return res.status(401).json({ erro: 'Sessão inválida' }); }
   res.json(user);
 });
 
@@ -18,13 +18,12 @@ router.post('/login', async (req, res) => {
   if (!user || !verifyPassword(password, user.password_hash))
     return res.status(401).json({ erro: 'Usuário ou senha incorretos' });
 
-  req.session.userId = user.id;
-  req.session.username = user.username;
+  res.setSession(user.id, user.username);
   res.json({ ok: true, username: user.username, role: user.role });
 });
 
 router.post('/logout', (req, res) => {
-  req.session = null;
+  res.clearSession();
   res.json({ ok: true });
 });
 
