@@ -22,7 +22,10 @@ router.post('/login', async (req, res) => {
     if (err) return res.status(500).json({ erro: 'Erro de sessão' });
     req.session.userId = user.id;
     req.session.username = user.username;
-    res.json({ ok: true, username: user.username, role: user.role });
+    req.session.save((err2) => {
+      if (err2) return res.status(500).json({ erro: 'Erro de sessão' });
+      res.json({ ok: true, username: user.username, role: user.role });
+    });
   });
 });
 
