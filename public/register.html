@@ -3,12 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Caliber — Entrar</title>
+  <title>Caliber — Criar conta</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="styles.css">
   <style>
-    /* Hide page until auth check completes — prevents flash of login on reload */
     body { opacity: 0; transition: opacity .18s ease; }
     body.ready { opacity: 1; }
 
@@ -22,10 +21,14 @@
     .pw-toggle:hover { color: var(--txt-primary); }
     .pw-toggle svg { width: 18px; height: 18px; }
 
-    .login-info {
+    .login-link {
       font-size: 13px; color: rgba(255,255,255,.45);
       text-align: center; margin-top: 4px;
     }
+    .login-link a {
+      color: var(--accent); text-decoration: none; font-weight: 600;
+    }
+    .login-link a:hover { text-decoration: underline; }
   </style>
 </head>
 <body class="login-body">
@@ -37,40 +40,46 @@
     </div>
 
     <div class="login-card">
-      <h2 class="login-title">Entrar</h2>
+      <h2 class="login-title">Criar conta</h2>
 
-      <div id="login-error" class="login-error hidden"></div>
+      <div id="reg-error" class="login-error hidden"></div>
 
       <div class="field">
         <label for="username">Usuário</label>
-        <input id="username" type="text" placeholder="seu usuário" autocomplete="username">
+        <input id="username" type="text" placeholder="escolha um usuário" autocomplete="username">
       </div>
 
-      <div class="field" style="margin-bottom:22px">
+      <div class="field">
         <label for="password">Senha</label>
         <div class="pw-wrap">
-          <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
-          <button class="pw-toggle" type="button" onclick="toggleSenha()" tabindex="-1" aria-label="Mostrar/ocultar senha">
+          <input id="password" type="password" placeholder="mín. 6 caracteres" autocomplete="new-password">
+          <button class="pw-toggle" type="button" onclick="toggleSenha('password','eye-show','eye-hide')" tabindex="-1" aria-label="Mostrar/ocultar senha">
             <svg id="eye-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             <svg id="eye-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
           </button>
         </div>
       </div>
 
-      <button class="btn login-btn" id="login-btn" onclick="doLogin()">Entrar</button>
+      <div class="field" style="margin-bottom:22px">
+        <label for="confirm">Confirmar senha</label>
+        <div class="pw-wrap">
+          <input id="confirm" type="password" placeholder="repita a senha" autocomplete="new-password">
+          <button class="pw-toggle" type="button" onclick="toggleSenha('confirm','eye-show2','eye-hide2')" tabindex="-1" aria-label="Mostrar/ocultar senha">
+            <svg id="eye-show2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg id="eye-hide2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <button class="btn login-btn" id="reg-btn" onclick="doRegister()">Criar conta</button>
     </div>
 
-    <div class="login-info">
-      <p id="novo-msg" class="hidden" style="color:var(--accent);font-size:13px;margin-bottom:6px">Conta criada com sucesso! Faça login para continuar.</p>
-      Não tem conta? <a href="/register" style="color:var(--accent);text-decoration:none;font-weight:600">Criar conta</a>
+    <div class="login-link">
+      Já tem conta? <a href="/login">Entrar</a>
     </div>
   </div>
 
   <script>
-    if (new URLSearchParams(location.search).get('novo') === '1') {
-      document.getElementById('novo-msg').classList.remove('hidden');
-    }
-
     fetch('/api/auth/me')
       .then(r => {
         if (r.ok) {
@@ -85,61 +94,68 @@
         document.getElementById('username').focus();
       });
 
-    document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
 
-    function toggleSenha() {
-      const input = document.getElementById('password');
-      const show  = document.getElementById('eye-show');
-      const hide  = document.getElementById('eye-hide');
+    function toggleSenha(inputId, showId, hideId) {
+      const input = document.getElementById(inputId);
+      const show  = document.getElementById(showId);
+      const hide  = document.getElementById(hideId);
       const isHidden = input.type === 'password';
       input.type = isHidden ? 'text' : 'password';
       show.style.display = isHidden ? 'none' : '';
       hide.style.display = isHidden ? '' : 'none';
     }
 
-    async function doLogin() {
+    async function doRegister() {
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
-      const errEl    = document.getElementById('login-error');
-      const btn      = document.getElementById('login-btn');
+      const confirm  = document.getElementById('confirm').value;
+      const errEl    = document.getElementById('reg-error');
+      const btn      = document.getElementById('reg-btn');
 
       errEl.classList.add('hidden');
 
-      if (!username || !password) {
-        showError('Preencha usuário e senha');
+      if (!username || !password || !confirm) {
+        showError('Preencha todos os campos');
+        return;
+      }
+      if (password.length < 6) {
+        showError('Senha precisa ter ao menos 6 caracteres');
+        return;
+      }
+      if (password !== confirm) {
+        showError('As senhas não conferem');
         return;
       }
 
       btn.disabled = true;
-      btn.textContent = 'Entrando…';
+      btn.textContent = 'Criando conta…';
 
       try {
-        const r    = await fetch('/api/auth/login', {
+        const r    = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username, password, confirm }),
         });
         const data = await r.json();
 
         if (r.ok) {
-          btn.textContent = 'Redirecionando…';
-          window.location.replace('/');
+          btn.textContent = 'Conta criada!';
+          window.location.replace('/login?novo=1');
         } else {
-          showError(data.erro || 'Erro ao fazer login');
+          showError(data.erro || 'Erro ao criar conta');
           btn.disabled = false;
-          btn.textContent = 'Entrar';
-          document.getElementById('password').value = '';
-          document.getElementById('password').focus();
+          btn.textContent = 'Criar conta';
         }
       } catch {
         showError('Sem conexão com o servidor');
         btn.disabled = false;
-        btn.textContent = 'Entrar';
+        btn.textContent = 'Criar conta';
       }
     }
 
     function showError(msg) {
-      const el = document.getElementById('login-error');
+      const el = document.getElementById('reg-error');
       el.textContent = msg;
       el.classList.remove('hidden');
     }

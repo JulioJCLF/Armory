@@ -53,6 +53,29 @@ async function requireAdmin(req, res, next) {
   next();
 }
 
+// Public self-registration — anyone can create a tecnico account
+router.post('/signup', async (req, res) => {
+  const { username, password, confirm } = req.body;
+  if (!username || !password)
+    return res.status(400).json({ erro: 'Informe usuário e senha' });
+  if (password.length < 6)
+    return res.status(400).json({ erro: 'Senha precisa ter ao menos 6 caracteres' });
+  if (confirm !== undefined && password !== confirm)
+    return res.status(400).json({ erro: 'As senhas não conferem' });
+
+  try {
+    const row = await db.run(
+      'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?) RETURNING id',
+      [username.trim().toLowerCase(), hashPassword(password), 'tecnico']
+    );
+    res.json({ ok: true, id: row.id });
+  } catch (e) {
+    if (e.message.includes('unique') || e.message.includes('duplicate'))
+      return res.status(409).json({ erro: 'Usuário já existe' });
+    res.status(500).json({ erro: 'Erro ao criar usuário' });
+  }
+});
+
 router.post('/register', requireAdmin, async (req, res) => {
   const { username, password, role } = req.body;
   if (!username || !password || password.length < 6)
