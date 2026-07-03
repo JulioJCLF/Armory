@@ -18,19 +18,14 @@ router.post('/login', async (req, res) => {
   if (!user || !verifyPassword(password, user.password_hash))
     return res.status(401).json({ erro: 'Usuário ou senha incorretos' });
 
-  req.session.regenerate((err) => {
-    if (err) return res.status(500).json({ erro: 'Erro de sessão' });
-    req.session.userId = user.id;
-    req.session.username = user.username;
-    req.session.save((err2) => {
-      if (err2) return res.status(500).json({ erro: 'Erro de sessão' });
-      res.json({ ok: true, username: user.username, role: user.role });
-    });
-  });
+  req.session.userId = user.id;
+  req.session.username = user.username;
+  res.json({ ok: true, username: user.username, role: user.role });
 });
 
 router.post('/logout', (req, res) => {
-  req.session.destroy(() => res.clearCookie('connect.sid').json({ ok: true }));
+  req.session = null;
+  res.json({ ok: true });
 });
 
 router.post('/change-password', async (req, res) => {

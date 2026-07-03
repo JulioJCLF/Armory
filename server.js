@@ -1,7 +1,6 @@
 const path = require('path');
 const express = require('express');
-const session = require('express-session');
-const pgSession = require('connect-pg-simple')(session);
+const cookieSession = require('cookie-session');
 const db = require('./db');
 const ordensRouter = require('./routes/ordens');
 const { gerarOrdemServicoPDF } = require('./pdf/ordemServico');
@@ -29,21 +28,15 @@ app.use(async (req, res, next) => {
 });
 
 // ── Sessions ───────────────────────────────────────────────
-// Use PostgreSQL session store in production (persists across serverless invocations).
-// Falls back to in-memory store for local dev without DATABASE_URL.
-app.use(session({
-  store: process.env.DATABASE_URL
-    ? new pgSession({ pool: db.pool, tableName: 'user_sessions' })
-    : undefined,
-  secret: process.env.SESSION_SECRET || 'caliber-dev-secret-change-in-prod',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  },
+// cookie-session stores session data in a signed HTTP-only cookie —
+// no server-side store needed, works across all Vercel instances.
+app.use(cookieSession({
+  name: 'caliber.sess',
+  keys: [process.env.SESSION_SECRET || 'caliber-dev-secret-change-in-prod'],
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: process.env.NODE_ENV === 'production',
 }));
 
 // ── Auth routes (public) ──────────────────────────────────
